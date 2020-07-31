@@ -10,6 +10,7 @@ import (
 	"github.com/shopspring/decimal"
 
 	"github.com/jchorl/camelid/internal/exchange"
+	"github.com/jchorl/camelid/internal/reconciliation"
 )
 
 func trade(ctx context.Context, ticker string, dollarAmount float32, side alpaca.Side) error {
@@ -34,13 +35,23 @@ func trade(ctx context.Context, ticker string, dollarAmount float32, side alpaca
 
 	qty := math.Floor(float64(dollarAmount / price))
 
+	tradeRecord := reconciliation.NewTradeRecord()
+	tradeRecord.Status = reconciliation.StatusSubmitted
+
+	reconciler := reconciliation.FromContext(ctx)
+	err = reconciler.Record(ctx, tradeRecord)
+	if err != nil {
+		return err
+	}
+
 	request := alpaca.PlaceOrderRequest{
-		AccountID:   account.ID,
-		AssetKey:    &ticker,
-		Qty:         decimal.NewFromFloat(qty),
-		Side:        side,
-		Type:        alpaca.Market,
-		TimeInForce: alpaca.Day,
+		AccountID:     account.ID,
+		AssetKey:      &ticker,
+		Qty:           decimal.NewFromFloat(qty),
+		Side:          side,
+		Type:          alpaca.Market,
+		TimeInForce:   alpaca.Day,
+		ClientOrderID: tradeRecord.GetID(),
 	}
 
 	glog.Infof("placing order %+v, estimated price: %v", request, price)
@@ -48,6 +59,13 @@ func trade(ctx context.Context, ticker string, dollarAmount float32, side alpaca
 	order, err := client.PlaceOrder(request)
 	if err != nil {
 		return fmt.Errorf("placing order %v: %w", request, err)
+	}
+
+	tradeRecord.AlpacaOrderID = order.ID
+	tradeRecord.Status = reconciliation.StatusAccepted
+	err = reconciler.Record(ctx, tradeRecord)
+	if err != nil {
+		return err
 	}
 
 	glog.Infof("order completed: %+v", order)

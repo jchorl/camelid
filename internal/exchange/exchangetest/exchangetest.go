@@ -7,7 +7,11 @@ import (
 	"github.com/alpacahq/alpaca-trade-api-go/alpaca"
 	"github.com/google/uuid"
 	"github.com/shopspring/decimal"
+
+	"github.com/jchorl/camelid/internal/exchange"
 )
+
+var _ exchange.Client = (*MockClient)(nil)
 
 type MockClient struct {
 	accountID string
