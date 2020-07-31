@@ -12,8 +12,8 @@ import (
 )
 
 type Reconciler interface {
-	Record(context.Context, TradeRecord) error
-	Reconcile(context.Context) ([]TradeRecord, error)
+	Record(context.Context, Record) error
+	Reconcile(context.Context) ([]Record, error)
 }
 
 const dynamoTable = "TradeRecordsTest"
@@ -24,7 +24,7 @@ func NewReconciler() Reconciler {
 	return &reconciler{}
 }
 
-func (r *reconciler) Record(ctx context.Context, record TradeRecord) error {
+func (r *reconciler) Record(ctx context.Context, record Record) error {
 	dynamoClient := db.FromContext(ctx)
 	av, err := dynamodbattribute.MarshalMap(record)
 	if err != nil {
@@ -42,7 +42,7 @@ func (r *reconciler) Record(ctx context.Context, record TradeRecord) error {
 	return nil
 }
 
-func (r *reconciler) Reconcile(ctx context.Context) ([]TradeRecord, error) {
+func (r *reconciler) Reconcile(ctx context.Context) ([]Record, error) {
 	// query all unreconciled
 	// loop through and check status
 	return nil, nil

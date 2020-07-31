@@ -17,6 +17,7 @@ type MockClient struct {
 	accountID string
 	quotes    map[string]*alpaca.LastQuoteResponse
 	orderReqs []alpaca.PlaceOrderRequest
+	orders    []*alpaca.Order
 }
 
 func NewMockClient(accountID string) *MockClient {
@@ -55,6 +56,7 @@ func (c *MockClient) PlaceOrder(req alpaca.PlaceOrderRequest) (*alpaca.Order, er
 		TimeInForce:   req.TimeInForce,
 		Status:        "accepted",
 	}
+	c.orders = append(c.orders, order)
 	return order, nil
 }
 
@@ -65,4 +67,8 @@ func (c *MockClient) SetQuote(ticker string, resp *alpaca.LastQuoteResponse) {
 
 func (c *MockClient) GetOrderReqs() []alpaca.PlaceOrderRequest {
 	return c.orderReqs
+}
+
+func (c *MockClient) GetOrders() []*alpaca.Order {
+	return c.orders
 }

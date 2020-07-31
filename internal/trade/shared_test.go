@@ -48,20 +48,23 @@ func TestTrade(t *testing.T) {
 
 	require.Len(t, reconciler.records, 2)
 	require.Equal(t, receivedReq.ClientOrderID, reconciler.records[0].GetID())
-	require.Equal(t, reconciliation.StatusSubmitted, reconciler.records[0].Status)
+
+	// cant check status of the 0th record, because it gets updated
 	require.Equal(t, receivedReq.ClientOrderID, reconciler.records[1].GetID())
-	require.Equal(t, reconciliation.StatusAccepted, reconciler.records[1].Status)
+	require.Equal(t, reconciliation.StatusAccepted, reconciler.records[1].GetStatus())
+	require.Len(t, alpacaClient.GetOrders(), 1)
+	require.Equal(t, alpacaClient.GetOrders()[0].ID, reconciler.records[1].GetAlpacaOrderID())
 }
 
 type mockReconciler struct {
-	records []reconciliation.TradeRecord
+	records []reconciliation.Record
 }
 
-func (r *mockReconciler) Record(_ context.Context, record reconciliation.TradeRecord) error {
+func (r *mockReconciler) Record(_ context.Context, record reconciliation.Record) error {
 	r.records = append(r.records, record)
 	return nil
 }
 
-func (r *mockReconciler) Reconcile(_ context.Context) ([]reconciliation.TradeRecord, error) {
+func (r *mockReconciler) Reconcile(_ context.Context) ([]reconciliation.Record, error) {
 	return nil, nil
 }

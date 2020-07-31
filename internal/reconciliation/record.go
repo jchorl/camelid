@@ -7,24 +7,45 @@ import (
 type Status int
 
 const (
-	StatusSubmitted Status = iota
+	StatusCreated Status = iota
 	StatusAccepted
 )
 
-type TradeRecord struct {
-	id            string
-	AlpacaOrderID string
-	Status        Status
-
-	reconciled bool
+type Record interface {
+	GetID() string
+	GetAlpacaOrderID() string
+	GetStatus() Status
+	SetAccepted(alpacaOrderID string)
 }
 
-func NewTradeRecord() TradeRecord {
-	return TradeRecord{
-		id: uuid.New().String(),
+type record struct {
+	// need exported fields for the dynamo marshaler
+	ID            string
+	AlpacaOrderID string
+	Status        Status
+	Reconciled    bool
+}
+
+func NewRecord() Record {
+	return &record{
+		ID:     uuid.New().String(),
+		Status: StatusCreated,
 	}
 }
 
-func (r TradeRecord) GetID() string {
-	return r.id
+func (r *record) GetID() string {
+	return r.ID
+}
+
+func (r *record) GetAlpacaOrderID() string {
+	return r.AlpacaOrderID
+}
+
+func (r *record) GetStatus() Status {
+	return r.Status
+}
+
+func (r *record) SetAccepted(alpacaOrderID string) {
+	r.AlpacaOrderID = alpacaOrderID
+	r.Status = StatusAccepted
 }

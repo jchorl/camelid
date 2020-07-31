@@ -35,11 +35,10 @@ func trade(ctx context.Context, ticker string, dollarAmount float32, side alpaca
 
 	qty := math.Floor(float64(dollarAmount / price))
 
-	tradeRecord := reconciliation.NewTradeRecord()
-	tradeRecord.Status = reconciliation.StatusSubmitted
+	record := reconciliation.NewRecord()
 
 	reconciler := reconciliation.FromContext(ctx)
-	err = reconciler.Record(ctx, tradeRecord)
+	err = reconciler.Record(ctx, record)
 	if err != nil {
 		return err
 	}
@@ -51,7 +50,7 @@ func trade(ctx context.Context, ticker string, dollarAmount float32, side alpaca
 		Side:          side,
 		Type:          alpaca.Market,
 		TimeInForce:   alpaca.Day,
-		ClientOrderID: tradeRecord.GetID(),
+		ClientOrderID: record.GetID(),
 	}
 
 	glog.Infof("placing order %+v, estimated price: %v", request, price)
@@ -61,9 +60,8 @@ func trade(ctx context.Context, ticker string, dollarAmount float32, side alpaca
 		return fmt.Errorf("placing order %v: %w", request, err)
 	}
 
-	tradeRecord.AlpacaOrderID = order.ID
-	tradeRecord.Status = reconciliation.StatusAccepted
-	err = reconciler.Record(ctx, tradeRecord)
+	record.SetAccepted(order.ID)
+	err = reconciler.Record(ctx, record)
 	if err != nil {
 		return err
 	}
