@@ -39,6 +39,16 @@ func (c *MockClient) GetLastQuote(ticker string) (*alpaca.LastQuoteResponse, err
 	return nil, fmt.Errorf("quote not found for %s", ticker)
 }
 
+func (c *MockClient) GetOrder(orderID string) (*alpaca.Order, error) {
+	for _, order := range c.orders {
+		if order.ID == orderID {
+			return order, nil
+		}
+	}
+
+	return nil, fmt.Errorf("no order found with ID %s", orderID)
+}
+
 func (c *MockClient) PlaceOrder(req alpaca.PlaceOrderRequest) (*alpaca.Order, error) {
 	c.orderReqs = append(c.orderReqs, req)
 	order := &alpaca.Order{
@@ -50,7 +60,6 @@ func (c *MockClient) PlaceOrder(req alpaca.PlaceOrderRequest) (*alpaca.Order, er
 		Symbol:        *req.AssetKey,
 		Exchange:      "Class:us_equity",
 		Qty:           req.Qty,
-		FilledQty:     decimal.Decimal{},
 		Type:          req.Type,
 		Side:          req.Side,
 		TimeInForce:   req.TimeInForce,
@@ -65,10 +74,52 @@ func (c *MockClient) SetQuote(ticker string, resp *alpaca.LastQuoteResponse) {
 	c.quotes[ticker] = resp
 }
 
+func (c *MockClient) AddOrder(order *alpaca.Order) {
+	c.orders = append(c.orders, order)
+}
+
 func (c *MockClient) GetOrderReqs() []alpaca.PlaceOrderRequest {
 	return c.orderReqs
 }
 
 func (c *MockClient) GetOrders() []*alpaca.Order {
 	return c.orders
+}
+
+func NewFilledOrder(id string) *alpaca.Order {
+	fillPrice := decimal.NewFromFloat(298.45)
+	order := newOrder(id)
+
+	now := time.Now()
+	order.FilledAt = &now
+	order.FilledQty = decimal.NewFromInt(3)
+	order.FilledAvgPrice = &fillPrice
+	order.Status = "filled"
+	return order
+}
+
+func NewUnfilledOrder(id string) *alpaca.Order {
+	order := newOrder(id)
+	order.Status = "accepted"
+	return order
+}
+
+func newOrder(id string) *alpaca.Order {
+	now := time.Now()
+	return &alpaca.Order{
+		ID:            id,
+		ClientOrderID: uuid.New().String(),
+		CreatedAt:     now.Add(-time.Hour),
+		UpdatedAt:     now,
+		SubmittedAt:   now.Add(-time.Hour),
+		FilledAt:      &now,
+		AssetID:       "4f75ad35-b947-4717-87db-19aa3dbf637d",
+		Symbol:        "VOO",
+		Exchange:      "Class:us_equity",
+		Qty:           decimal.NewFromInt(3),
+		Type:          alpaca.Market,
+		Side:          alpaca.Buy,
+		TimeInForce:   alpaca.Day,
+		ExtendedHours: false,
+	}
 }

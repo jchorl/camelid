@@ -2,6 +2,7 @@ package trade
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	"github.com/alpacahq/alpaca-trade-api-go/alpaca"
@@ -48,23 +49,54 @@ func TestTrade(t *testing.T) {
 
 	require.Len(t, reconciler.records, 2)
 	require.Equal(t, receivedReq.ClientOrderID, reconciler.records[0].GetID())
-
-	// cant check status of the 0th record, because it gets updated
+	require.Equal(t, reconciliation.StatusUnreconciled, reconciler.records[0].GetStatus())
 	require.Equal(t, receivedReq.ClientOrderID, reconciler.records[1].GetID())
-	require.Equal(t, reconciliation.StatusAccepted, reconciler.records[1].GetStatus())
+	require.Equal(t, reconciliation.StatusUnreconciled, reconciler.records[1].GetStatus())
 	require.Len(t, alpacaClient.GetOrders(), 1)
 	require.Equal(t, alpacaClient.GetOrders()[0].ID, reconciler.records[1].GetAlpacaOrderID())
 }
 
+func TestTrade_FailsNoRecording(t *testing.T) {
+	alpacaClient := exchangetest.NewMockClient("6")
+	ticker := "SPY"
+	alpacaClient.SetQuote(ticker, &alpaca.LastQuoteResponse{
+		Status: "success",
+		Symbol: "SPY",
+		Last: alpaca.LastQuote{
+			AskPrice:    326.41,
+			AskSize:     5,
+			AskExchange: 2,
+			BidPrice:    326.35,
+			BidSize:     1,
+			BidExchange: 17,
+			Timestamp:   1596226084553000000,
+		},
+	})
+
+	ctx := exchange.NewContext(context.TODO(), alpacaClient)
+	reconciler := &mockReconciler{shouldFail: true}
+	ctx = reconciliation.NewContext(ctx, reconciler)
+
+	err := trade(ctx, ticker, 3000.0, alpaca.Buy)
+	require.Error(t, err)
+	require.Empty(t, alpacaClient.GetOrderReqs())
+	require.Empty(t, alpacaClient.GetOrders())
+}
+
 type mockReconciler struct {
-	records []reconciliation.Record
+	shouldFail bool
+	records    []reconciliation.Record
 }
 
 func (r *mockReconciler) Record(_ context.Context, record reconciliation.Record) error {
+	if r.shouldFail {
+		return errors.New("mockReconciler.Record set to fail")
+	}
+
 	r.records = append(r.records, record)
 	return nil
 }
 
-func (r *mockReconciler) Reconcile(_ context.Context) ([]reconciliation.Record, error) {
-	return nil, nil
+func (r *mockReconciler) Reconcile(_ context.Context) error {
+	return nil
 }
