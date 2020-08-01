@@ -7,4 +7,5 @@ type Client interface {
 	GetLastQuote(string) (*alpaca.LastQuoteResponse, error)
 	GetOrder(string) (*alpaca.Order, error)
 	PlaceOrder(alpaca.PlaceOrderRequest) (*alpaca.Order, error)
+	ListPositions() ([]alpaca.Position, error)
 }

@@ -31,14 +31,21 @@ func main() {
 	reconciler := reconciliation.NewReconciler()
 	ctx = reconciliation.NewContext(ctx, reconciler)
 
-	var err error
-	// err = trade.Buy(ctx, "SPY", 500.0)
+	// pfolio := portfolio.New(portfolio.Config{Ratios: map[string]float64{}})
+
+	// err := reconciler.Reconcile(ctx)
 	// if err != nil {
-	// 	glog.Fatalf("buying: %+v", err)
+	// 	glog.Fatalf("failed to reconcile: %v", err)
 	// }
 
-	err = reconciler.Reconcile(ctx)
+	positions, err := alpacaClient.ListPositions()
 	if err != nil {
-		glog.Fatalf("reconciling: %+v", err)
+		glog.Fatalf("listing positions: %v", err)
 	}
+	glog.Infof("%#v", positions)
+
+	// _, err := pfolio.GetDeltas(ctx)
+	// if err != nil {
+	// 	glog.Fatalf("getting deltas: %v", err)
+	// }
 }

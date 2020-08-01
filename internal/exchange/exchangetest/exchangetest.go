@@ -18,6 +18,7 @@ type MockClient struct {
 	quotes    map[string]*alpaca.LastQuoteResponse
 	orderReqs []alpaca.PlaceOrderRequest
 	orders    []*alpaca.Order
+	positions []alpaca.Position
 }
 
 func NewMockClient(accountID string) *MockClient {
@@ -47,6 +48,10 @@ func (c *MockClient) GetOrder(orderID string) (*alpaca.Order, error) {
 	}
 
 	return nil, fmt.Errorf("no order found with ID %s", orderID)
+}
+
+func (c *MockClient) ListPositions() ([]alpaca.Position, error) {
+	return c.positions, nil
 }
 
 func (c *MockClient) PlaceOrder(req alpaca.PlaceOrderRequest) (*alpaca.Order, error) {
@@ -84,6 +89,10 @@ func (c *MockClient) GetOrderReqs() []alpaca.PlaceOrderRequest {
 
 func (c *MockClient) GetOrders() []*alpaca.Order {
 	return c.orders
+}
+
+func (c *MockClient) SetPositions(positions []alpaca.Position) {
+	c.positions = positions
 }
 
 func NewFilledOrder(id string) *alpaca.Order {
