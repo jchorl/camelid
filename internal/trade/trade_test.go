@@ -9,7 +9,6 @@ import (
 	"github.com/shopspring/decimal"
 	"github.com/stretchr/testify/require"
 
-	"github.com/jchorl/camelid/internal/exchange"
 	"github.com/jchorl/camelid/internal/exchange/exchangetest"
 	"github.com/jchorl/camelid/internal/reconciliation"
 )
@@ -31,11 +30,10 @@ func TestTrade(t *testing.T) {
 		},
 	})
 
-	ctx := exchange.NewContext(context.TODO(), alpacaClient)
 	reconciler := &mockReconciler{}
-	ctx = reconciliation.NewContext(ctx, reconciler)
 
-	err := trade(ctx, ticker, 3000.0, alpaca.Buy)
+	c := New(alpacaClient, reconciler)
+	err := c.trade(context.TODO(), ticker, decimal.NewFromInt(3000), alpaca.Buy)
 	require.NoError(t, err)
 
 	require.Len(t, alpacaClient.GetOrderReqs(), 1)
@@ -73,11 +71,10 @@ func TestTrade_FailsNoRecording(t *testing.T) {
 		},
 	})
 
-	ctx := exchange.NewContext(context.TODO(), alpacaClient)
 	reconciler := &mockReconciler{shouldFail: true}
-	ctx = reconciliation.NewContext(ctx, reconciler)
 
-	err := trade(ctx, ticker, 3000.0, alpaca.Buy)
+	c := New(alpacaClient, reconciler)
+	err := c.trade(context.TODO(), ticker, decimal.NewFromInt(3000), alpaca.Buy)
 	require.Error(t, err)
 	require.Empty(t, alpacaClient.GetOrderReqs())
 	require.Empty(t, alpacaClient.GetOrders())

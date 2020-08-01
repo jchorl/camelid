@@ -6,24 +6,20 @@ import (
 	"time"
 
 	"github.com/alpacahq/alpaca-trade-api-go/alpaca"
-	"github.com/jchorl/camelid/internal/db"
 	"github.com/jchorl/camelid/internal/db/dbtest"
-	"github.com/jchorl/camelid/internal/exchange"
 	"github.com/jchorl/camelid/internal/exchange/exchangetest"
 	"github.com/stretchr/testify/require"
 )
 
 func TestRecord(t *testing.T) {
 	dynamoClient := dbtest.NewMockClient(dynamoTable)
-	ctx := db.NewContext(context.TODO(), dynamoClient)
-
-	reconciler := NewReconciler()
+	reconciler := New(dynamoClient, nil)
 	rec := &record{
 		ID:            "123",
 		AlpacaOrderID: "alpaca_111",
 		Status:        StatusUnreconciled,
 	}
-	err := reconciler.Record(ctx, rec)
+	err := reconciler.Record(context.TODO(), rec)
 	require.NoError(t, err)
 }
 
@@ -163,21 +159,19 @@ func TestReconcile(t *testing.T) {
 	for _, tc := range cases {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
-			reconciler := NewReconciler()
-
+			dbClient := dbtest.NewMockClient(dynamoTable)
 			alpacaClient := exchangetest.NewMockClient("6")
-			ctx := exchange.NewContext(context.TODO(), alpacaClient)
+			reconciler := New(dbClient, alpacaClient)
+
 			for _, order := range tc.orders {
 				alpacaClient.AddOrder(order)
 			}
 
-			dbClient := dbtest.NewMockClient(dynamoTable)
-			ctx = db.NewContext(ctx, dbClient)
 			for _, rec := range tc.dbRecords {
-				reconciler.Record(ctx, &rec)
+				reconciler.Record(context.TODO(), &rec)
 			}
 
-			err := reconciler.Reconcile(ctx)
+			err := reconciler.Reconcile(context.TODO())
 			if tc.expectedErr {
 				require.Error(t, err)
 			} else {

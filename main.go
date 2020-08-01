@@ -11,47 +11,56 @@ import (
 	"github.com/golang/glog"
 	"github.com/shopspring/decimal"
 
-	"github.com/jchorl/camelid/internal/db"
-	"github.com/jchorl/camelid/internal/exchange"
 	"github.com/jchorl/camelid/internal/portfolio"
 	"github.com/jchorl/camelid/internal/reconciliation"
+	"github.com/jchorl/camelid/internal/trade"
 )
 
 func main() {
 	flag.Parse()
 
-	ctx := context.TODO()
-	alpacaClient := alpaca.NewClient(common.Credentials())
-	ctx = exchange.NewContext(ctx, alpacaClient)
+	dryRun := true
 
-	awsSession := session.Must(session.NewSessionWithOptions(session.Options{
-		SharedConfigState: session.SharedConfigEnable,
-	}))
-	dynamoClient := dynamodb.New(awsSession)
-	ctx = db.NewContext(ctx, dynamoClient)
-
-	reconciler := reconciliation.NewReconciler()
-	ctx = reconciliation.NewContext(ctx, reconciler)
-
-	err := run(ctx)
+	err := run(context.TODO(), dryRun)
 	if err != nil {
 		glog.Fatalf("failed: %v", err)
 	}
 }
 
-func run(ctx context.Context) error {
-	reconciler := reconciliation.FromContext(ctx)
+func run(ctx context.Context, dryRun bool) error {
+	alpacaClient := alpaca.NewClient(common.Credentials())
+
+	awsSession := session.Must(session.NewSessionWithOptions(session.Options{
+		SharedConfigState: session.SharedConfigEnable,
+	}))
+	dynamoClient := dynamodb.New(awsSession)
+
+	reconciler := reconciliation.New(dynamoClient, alpacaClient)
+	tradingClient := trade.New(alpacaClient, reconciler)
+
 	err := reconciler.Reconcile(ctx)
 	if err != nil {
 		glog.Fatalf("failed to reconcile: %v", err)
 	}
 
-	pfolio := portfolio.New(map[string]float64{})
+	pfolio := portfolio.New(alpacaClient, map[string]float64{})    // TODO get ratios from config
 	deltas, err := pfolio.GetDeltas(ctx, decimal.NewFromInt(1000)) // TODO get the amount to invest properly
 	if err != nil {
 		glog.Fatalf("getting deltas: %v", err)
 	}
 
-	glog.Infof("found deltas: %v", deltas)
+	// TODO divvy up the buy pie, because we cant use dollars from sales
+	for ticker, delta := range deltas {
+		if dryRun {
+			glog.Infof("DRY-RUN would have traded $%s of %s", delta.StringFixed(2), ticker)
+		} else if delta.GreaterThan(decimal.Zero) {
+			err := tradingClient.Buy(ctx, ticker, delta)
+			if err != nil {
+				return err
+			}
+		} else {
+			glog.Warningf("selling is not supported yet, not selling $%s of %s", delta.Abs().StringFixed(2), ticker)
+		}
+	}
 	return nil
 }

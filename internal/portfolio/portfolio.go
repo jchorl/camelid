@@ -2,6 +2,7 @@ package portfolio
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/jchorl/camelid/internal/exchange"
@@ -9,15 +10,23 @@ import (
 )
 
 type Portfolio struct {
-	ratios map[string]float64 `json:"ratios"` // ownership ratios, ticker -> shares
+	exchangeClient exchange.Client
+	ratios         map[string]float64 `json:"ratios"` // ownership ratios, ticker -> shares
 }
 
-func New(ratios map[string]float64) Portfolio {
-	return Portfolio{ratios: ratios}
+func New(exchangeClient exchange.Client, ratios map[string]float64) Portfolio {
+	return Portfolio{
+		exchangeClient: exchangeClient,
+		ratios:         ratios,
+	}
 }
 
 func (p *Portfolio) GetDeltas(ctx context.Context, amountToInvest decimal.Decimal) (map[string]decimal.Decimal, error) {
-	holdings, err := getCurrentHoldingsInDollars(ctx)
+	if len(p.ratios) == 0 {
+		return nil, errors.New("cannot get deltas with no holding ratios defined")
+	}
+
+	holdings, err := p.getCurrentHoldingsInDollars(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -59,9 +68,8 @@ func (p *Portfolio) GetDeltas(ctx context.Context, amountToInvest decimal.Decima
 	return deltas, nil
 }
 
-func getCurrentHoldingsInDollars(ctx context.Context) (map[string]decimal.Decimal, error) {
-	alpacaClient := exchange.FromContext(ctx)
-	positions, err := alpacaClient.ListPositions()
+func (p *Portfolio) getCurrentHoldingsInDollars(ctx context.Context) (map[string]decimal.Decimal, error) {
+	positions, err := p.exchangeClient.ListPositions()
 	if err != nil {
 		return nil, fmt.Errorf("listing positions: %w", err)
 	}

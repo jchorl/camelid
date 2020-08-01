@@ -8,7 +8,6 @@ import (
 	"github.com/shopspring/decimal"
 	"github.com/stretchr/testify/require"
 
-	"github.com/jchorl/camelid/internal/exchange"
 	"github.com/jchorl/camelid/internal/exchange/exchangetest"
 )
 
@@ -109,11 +108,10 @@ func TestGetDeltas(t *testing.T) {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			alpacaClient := exchangetest.NewMockClient("6")
-			ctx := exchange.NewContext(context.TODO(), alpacaClient)
 			alpacaClient.SetPositions(tc.currentPositions)
 
-			portfolio := New(tc.desiredRatios)
-			deltas, err := portfolio.GetDeltas(ctx, tc.amountToInvest)
+			portfolio := New(alpacaClient, tc.desiredRatios)
+			deltas, err := portfolio.GetDeltas(context.TODO(), tc.amountToInvest)
 			require.NoError(t, err)
 			require.Equal(
 				t, len(tc.expectedDeltas), len(deltas),
@@ -126,6 +124,14 @@ func TestGetDeltas(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestGetDeltas_ErrorsWithNoRatios(t *testing.T) {
+	alpacaClient := exchangetest.NewMockClient("6")
+
+	portfolio := New(alpacaClient, map[string]float64{})
+	_, err := portfolio.GetDeltas(context.TODO(), decimal.NewFromInt(300))
+	require.Error(t, err)
 }
 
 func newPosition(ticker string, marketValue decimal.Decimal) alpaca.Position {

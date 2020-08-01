@@ -3,7 +3,6 @@ package trade
 import (
 	"context"
 	"fmt"
-	"math"
 
 	"github.com/alpacahq/alpaca-trade-api-go/alpaca"
 	"github.com/golang/glog"
@@ -13,32 +12,43 @@ import (
 	"github.com/jchorl/camelid/internal/reconciliation"
 )
 
-func trade(ctx context.Context, ticker string, dollarAmount float32, side alpaca.Side) error {
-	client := exchange.FromContext(ctx)
-	account, err := client.GetAccount()
+type Client struct {
+	exchangeClient exchange.Client
+	reconciler     reconciliation.Client
+}
+
+func New(exchangeClient exchange.Client, reconciler reconciliation.Client) *Client {
+	return &Client{exchangeClient, reconciler}
+}
+
+func (c *Client) Buy(ctx context.Context, ticker string, dollarAmount decimal.Decimal) error {
+	return c.trade(ctx, ticker, dollarAmount, alpaca.Buy)
+}
+
+func (c *Client) trade(ctx context.Context, ticker string, dollarAmount decimal.Decimal, side alpaca.Side) error {
+	account, err := c.exchangeClient.GetAccount()
 	if err != nil {
 		return fmt.Errorf("getting account: %w", err)
 	}
 
-	lastQuote, err := client.GetLastQuote(ticker)
+	lastQuote, err := c.exchangeClient.GetLastQuote(ticker)
 	if err != nil {
 		return fmt.Errorf("GetLastQuote(%s): %w", ticker, err)
 	}
 
 	// depending on buy/sell, select for bid/ask
-	var price float32
+	var price decimal.Decimal
 	if side == alpaca.Buy {
-		price = lastQuote.Last.BidPrice
+		price = decimal.NewFromFloat32(lastQuote.Last.BidPrice)
 	} else {
-		price = lastQuote.Last.AskPrice
+		price = decimal.NewFromFloat32(lastQuote.Last.AskPrice)
 	}
 
-	qty := math.Floor(float64(dollarAmount / price))
+	qty := dollarAmount.Div(price).Floor()
 
 	record := reconciliation.NewRecord()
 
-	reconciler := reconciliation.FromContext(ctx)
-	err = reconciler.Record(ctx, record)
+	err = c.reconciler.Record(ctx, record)
 	if err != nil {
 		return err
 	}
@@ -46,7 +56,7 @@ func trade(ctx context.Context, ticker string, dollarAmount float32, side alpaca
 	request := alpaca.PlaceOrderRequest{
 		AccountID:     account.ID,
 		AssetKey:      &ticker,
-		Qty:           decimal.NewFromFloat(qty),
+		Qty:           qty,
 		Side:          side,
 		Type:          alpaca.Market,
 		TimeInForce:   alpaca.Day,
@@ -55,13 +65,13 @@ func trade(ctx context.Context, ticker string, dollarAmount float32, side alpaca
 
 	glog.Infof("placing order %+v, estimated price: %v", request, price)
 
-	order, err := client.PlaceOrder(request)
+	order, err := c.exchangeClient.PlaceOrder(request)
 	if err != nil {
 		return fmt.Errorf("placing order %v: %w", request, err)
 	}
 
 	record.SetAccepted(order.ID)
-	err = reconciler.Record(ctx, record)
+	err = c.reconciler.Record(ctx, record)
 	if err != nil {
 		return err
 	}
