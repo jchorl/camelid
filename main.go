@@ -9,9 +9,11 @@ import (
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/dynamodb"
 	"github.com/golang/glog"
+	"github.com/shopspring/decimal"
 
 	"github.com/jchorl/camelid/internal/db"
 	"github.com/jchorl/camelid/internal/exchange"
+	"github.com/jchorl/camelid/internal/portfolio"
 	"github.com/jchorl/camelid/internal/reconciliation"
 )
 
@@ -31,21 +33,25 @@ func main() {
 	reconciler := reconciliation.NewReconciler()
 	ctx = reconciliation.NewContext(ctx, reconciler)
 
-	// pfolio := portfolio.New(portfolio.Config{Ratios: map[string]float64{}})
-
-	// err := reconciler.Reconcile(ctx)
-	// if err != nil {
-	// 	glog.Fatalf("failed to reconcile: %v", err)
-	// }
-
-	positions, err := alpacaClient.ListPositions()
+	err := run(ctx)
 	if err != nil {
-		glog.Fatalf("listing positions: %v", err)
+		glog.Fatalf("failed: %v", err)
 	}
-	glog.Infof("%#v", positions)
+}
 
-	// _, err := pfolio.GetDeltas(ctx)
-	// if err != nil {
-	// 	glog.Fatalf("getting deltas: %v", err)
-	// }
+func run(ctx context.Context) error {
+	reconciler := reconciliation.FromContext(ctx)
+	err := reconciler.Reconcile(ctx)
+	if err != nil {
+		glog.Fatalf("failed to reconcile: %v", err)
+	}
+
+	pfolio := portfolio.New(map[string]float64{})
+	deltas, err := pfolio.GetDeltas(ctx, decimal.NewFromInt(1000)) // TODO get the amount to invest properly
+	if err != nil {
+		glog.Fatalf("getting deltas: %v", err)
+	}
+
+	glog.Infof("found deltas: %v", deltas)
+	return nil
 }
