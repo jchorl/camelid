@@ -80,6 +80,32 @@ func TestTrade_FailsNoRecording(t *testing.T) {
 	require.Empty(t, alpacaClient.GetOrders())
 }
 
+func TestTrade_NoTradeForZeroShares(t *testing.T) {
+	alpacaClient := exchangetest.NewMockClient("6")
+	ticker := "SPY"
+	alpacaClient.SetQuote(ticker, &alpaca.LastQuoteResponse{
+		Status: "success",
+		Symbol: "SPY",
+		Last: alpaca.LastQuote{
+			AskPrice:    326.41,
+			AskSize:     5,
+			AskExchange: 2,
+			BidPrice:    326.35,
+			BidSize:     1,
+			BidExchange: 17,
+			Timestamp:   1596226084553000000,
+		},
+	})
+
+	reconciler := &mockReconciler{}
+
+	c := New(alpacaClient, reconciler)
+	err := c.trade(context.TODO(), ticker, decimal.NewFromInt(100), alpaca.Buy)
+	require.NoError(t, err)
+	require.Empty(t, alpacaClient.GetOrderReqs())
+	require.Empty(t, alpacaClient.GetOrders())
+}
+
 type mockReconciler struct {
 	shouldFail bool
 	records    []reconciliation.Record

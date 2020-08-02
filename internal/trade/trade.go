@@ -46,6 +46,11 @@ func (c *Client) trade(ctx context.Context, ticker string, dollarAmount decimal.
 
 	qty := dollarAmount.Div(price).Floor()
 
+	if qty.LessThan(decimal.NewFromInt(1)) {
+		glog.Infof("not buying %s at $%s, $%s is too little to buy even 1 share", ticker, price.StringFixed(2), dollarAmount.StringFixed(2))
+		return nil
+	}
+
 	record := reconciliation.NewRecord()
 
 	err = c.reconciler.Record(ctx, record)
