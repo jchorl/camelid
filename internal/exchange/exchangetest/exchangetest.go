@@ -15,6 +15,7 @@ var _ exchange.Client = (*MockClient)(nil)
 
 type MockClient struct {
 	accountID string
+	cash      decimal.Decimal
 	quotes    map[string]*alpaca.LastQuoteResponse
 	orderReqs []alpaca.PlaceOrderRequest
 	orders    []*alpaca.Order
@@ -29,7 +30,10 @@ func NewMockClient(accountID string) *MockClient {
 }
 
 func (c *MockClient) GetAccount() (*alpaca.Account, error) {
-	return &alpaca.Account{ID: c.accountID}, nil
+	return &alpaca.Account{
+		ID:   c.accountID,
+		Cash: c.cash,
+	}, nil
 }
 
 func (c *MockClient) GetLastQuote(ticker string) (*alpaca.LastQuoteResponse, error) {
@@ -89,6 +93,10 @@ func (c *MockClient) GetOrderReqs() []alpaca.PlaceOrderRequest {
 
 func (c *MockClient) GetOrders() []*alpaca.Order {
 	return c.orders
+}
+
+func (c *MockClient) SetCash(cash decimal.Decimal) {
+	c.cash = cash
 }
 
 func (c *MockClient) SetPositions(positions []alpaca.Position) {

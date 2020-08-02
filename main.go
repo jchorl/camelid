@@ -2,7 +2,9 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"flag"
+	"os"
 
 	"github.com/alpacahq/alpaca-trade-api-go/alpaca"
 	"github.com/alpacahq/alpaca-trade-api-go/common"
@@ -21,13 +23,30 @@ func main() {
 
 	dryRun := true
 
-	err := run(context.TODO(), dryRun)
+	// lambda only supports env vars, not CLI flags...
+	ratios := map[string]float64{}
+	ratiosJSON := os.Getenv("CAMELID_RATIOS")
+	err := json.Unmarshal([]byte(ratiosJSON), &ratios)
+	if err != nil {
+		glog.Fatalf("parsing config: %v", err)
+	}
+	ratiosDecimal := map[string]decimal.Decimal{}
+	for ticker, shares := range ratios {
+		ratiosDecimal[ticker] = decimal.NewFromFloat(shares)
+	}
+
+	maxInvestment, err := decimal.NewFromString(os.Getenv("CAMELID_MAX_INVESTMENT"))
+	if err != nil {
+		glog.Fatalf("parsing max investment: %v", err)
+	}
+
+	err = run(context.TODO(), dryRun, ratiosDecimal, maxInvestment)
 	if err != nil {
 		glog.Fatalf("failed: %v", err)
 	}
 }
 
-func run(ctx context.Context, dryRun bool) error {
+func run(ctx context.Context, dryRun bool, ratios map[string]decimal.Decimal, maxInvestment decimal.Decimal) error {
 	alpacaClient := alpaca.NewClient(common.Credentials())
 
 	awsSession := session.Must(session.NewSessionWithOptions(session.Options{
@@ -43,8 +62,13 @@ func run(ctx context.Context, dryRun bool) error {
 		glog.Fatalf("failed to reconcile: %v", err)
 	}
 
-	pfolio := portfolio.New(alpacaClient, map[string]float64{})    // TODO get ratios from config
-	deltas, err := pfolio.GetDeltas(ctx, decimal.NewFromInt(1000)) // TODO get the amount to invest properly
+	pfolio := portfolio.New(alpacaClient, ratios)
+	amountToInvest, err := pfolio.GetAmountToInvest(maxInvestment)
+	if err != nil {
+		glog.Fatalf("getting amount to invest: %v", err)
+	}
+
+	deltas, err := pfolio.GetDeltasWithoutSales(ctx, amountToInvest)
 	if err != nil {
 		glog.Fatalf("getting deltas: %v", err)
 	}

@@ -11,17 +11,45 @@ import (
 
 type Portfolio struct {
 	exchangeClient exchange.Client
-	ratios         map[string]float64 `json:"ratios"` // ownership ratios, ticker -> shares
+	ratios         map[string]decimal.Decimal // ownership ratios, ticker -> shares
 }
 
-func New(exchangeClient exchange.Client, ratios map[string]float64) Portfolio {
+func New(exchangeClient exchange.Client, ratios map[string]decimal.Decimal) Portfolio {
 	return Portfolio{
 		exchangeClient: exchangeClient,
 		ratios:         ratios,
 	}
 }
 
-func (p *Portfolio) GetDeltas(ctx context.Context, amountToInvest decimal.Decimal) (map[string]decimal.Decimal, error) {
+func (p *Portfolio) GetDeltasWithoutSales(ctx context.Context, amountToInvest decimal.Decimal) (map[string]decimal.Decimal, error) {
+	deltas, err := p.GetDeltasWithSales(ctx, amountToInvest)
+	if err != nil {
+		return nil, err
+	}
+
+	// filter out all sales
+	filteredDeltas := map[string]decimal.Decimal{}
+	for ticker, delta := range deltas {
+		if !delta.IsPositive() {
+			continue
+		}
+
+		filteredDeltas[ticker] = delta
+	}
+
+	totalDesiredSpend := sumMapValuesDecimal(filteredDeltas)
+
+	// total spend can easily be > amountToInvest, because it accounts for sales.
+	// it's the desired state, assuming you could reinvest every dollar today.
+	// so scale down all buys to fit within budget.
+	for ticker, delta := range filteredDeltas {
+		filteredDeltas[ticker] = delta.Mul(amountToInvest).Div(totalDesiredSpend)
+	}
+
+	return filteredDeltas, nil
+}
+
+func (p *Portfolio) GetDeltasWithSales(ctx context.Context, amountToInvest decimal.Decimal) (map[string]decimal.Decimal, error) {
 	if len(p.ratios) == 0 {
 		return nil, errors.New("cannot get deltas with no holding ratios defined")
 	}
@@ -31,21 +59,15 @@ func (p *Portfolio) GetDeltas(ctx context.Context, amountToInvest decimal.Decima
 		return nil, err
 	}
 
-	total := decimal.Decimal{}
-	for _, holding := range holdings {
-		total = total.Add(holding)
-	}
+	total := sumMapValuesDecimal(holdings)
+	total = total.Add(amountToInvest)
 
-	totalShares := decimal.Decimal{}
-	for _, shares := range p.ratios {
-		totalShares = totalShares.Add(decimal.NewFromFloat(shares))
-	}
+	totalShares := sumMapValuesDecimal(p.ratios)
 
 	// divvy up the future pie
-	futureTotal := total.Add(amountToInvest)
 	desiredAmountDollars := map[string]decimal.Decimal{}
 	for ticker, shares := range p.ratios {
-		desiredAmountDollars[ticker] = decimal.NewFromFloat(shares).Div(totalShares).Mul(futureTotal)
+		desiredAmountDollars[ticker] = shares.Div(totalShares).Mul(total)
 	}
 
 	deltas := map[string]decimal.Decimal{}
@@ -68,6 +90,15 @@ func (p *Portfolio) GetDeltas(ctx context.Context, amountToInvest decimal.Decima
 	return deltas, nil
 }
 
+func (p *Portfolio) GetAmountToInvest(maxAmount decimal.Decimal) (decimal.Decimal, error) {
+	acct, err := p.exchangeClient.GetAccount()
+	if err != nil {
+		return decimal.Decimal{}, err
+	}
+
+	return decimal.Min(maxAmount, acct.Cash), nil
+}
+
 func (p *Portfolio) getCurrentHoldingsInDollars(ctx context.Context) (map[string]decimal.Decimal, error) {
 	positions, err := p.exchangeClient.ListPositions()
 	if err != nil {
@@ -80,4 +111,12 @@ func (p *Portfolio) getCurrentHoldingsInDollars(ctx context.Context) (map[string
 	}
 
 	return holdings, nil
+}
+
+func sumMapValuesDecimal(m map[string]decimal.Decimal) decimal.Decimal {
+	sum := decimal.Zero
+	for _, v := range m {
+		sum = sum.Add(v)
+	}
+	return sum
 }
