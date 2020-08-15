@@ -2,7 +2,7 @@
 
 docker run -it --rm \
     --env-file .env \
-    -v $(pwd)/terraform:/work \
-    -w /work \
-    hashicorp/terraform:0.12.29 \
+    -v $(pwd):/work \
+    -w /work/terraform \
+    hashicorp/terraform:0.13.0 \
     "$@"

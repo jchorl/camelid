@@ -1,3 +1,4 @@
 .env
+build/*
 terraform/.terraform
 terraform/terraform.tfstate*

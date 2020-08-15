@@ -8,6 +8,7 @@ import (
 
 	"github.com/alpacahq/alpaca-trade-api-go/alpaca"
 	"github.com/alpacahq/alpaca-trade-api-go/common"
+	"github.com/aws/aws-lambda-go/lambda"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/dynamodb"
 	"github.com/golang/glog"
@@ -18,17 +19,16 @@ import (
 	"github.com/jchorl/camelid/internal/trade"
 )
 
-func main() {
-	flag.Parse()
-
-	dryRun := true
+func HandleRequest(ctx context.Context) error {
+	dryRun := os.Getenv("CAMELID_DRY_RUN") != ""
 
 	// lambda only supports env vars, not CLI flags...
 	ratios := map[string]float64{}
 	ratiosJSON := os.Getenv("CAMELID_RATIOS")
 	err := json.Unmarshal([]byte(ratiosJSON), &ratios)
 	if err != nil {
-		glog.Fatalf("parsing config: %v", err)
+		glog.Errorf("parsing config: %v", err)
+		return err
 	}
 	ratiosDecimal := map[string]decimal.Decimal{}
 	for ticker, shares := range ratios {
@@ -37,22 +37,23 @@ func main() {
 
 	maxInvestment, err := decimal.NewFromString(os.Getenv("CAMELID_MAX_INVESTMENT"))
 	if err != nil {
-		glog.Fatalf("parsing max investment: %v", err)
+		glog.Errorf("parsing max investment: %v", err)
+		return err
 	}
 
-	err = run(context.TODO(), dryRun, ratiosDecimal, maxInvestment)
+	err = run(ctx, dryRun, ratiosDecimal, maxInvestment)
 	if err != nil {
-		glog.Fatalf("failed: %v", err)
+		glog.Errorf("failed: %v", err)
+		return err
 	}
+
+	return nil
 }
 
 func run(ctx context.Context, dryRun bool, ratios map[string]decimal.Decimal, maxInvestment decimal.Decimal) error {
 	alpacaClient := alpaca.NewClient(common.Credentials())
 
-	awsSession := session.Must(session.NewSessionWithOptions(session.Options{
-		SharedConfigState: session.SharedConfigEnable,
-	}))
-	dynamoClient := dynamodb.New(awsSession)
+	dynamoClient := dynamodb.New(session.New())
 
 	reconciler := reconciliation.New(dynamoClient, alpacaClient)
 	tradingClient := trade.New(alpacaClient, reconciler)
@@ -73,7 +74,6 @@ func run(ctx context.Context, dryRun bool, ratios map[string]decimal.Decimal, ma
 		glog.Fatalf("getting deltas: %v", err)
 	}
 
-	// TODO divvy up the buy pie, because we cant use dollars from sales
 	for ticker, delta := range deltas {
 		if dryRun {
 			glog.Infof("DRY-RUN would have traded $%s of %s", delta.StringFixed(2), ticker)
@@ -87,4 +87,11 @@ func run(ctx context.Context, dryRun bool, ratios map[string]decimal.Decimal, ma
 		}
 	}
 	return nil
+}
+
+func main() {
+	flag.Parse()
+	flag.Set("logtostderr", "true") // lambda can't pass cli flags, so hack the flags
+
+	lambda.Start(HandleRequest)
 }

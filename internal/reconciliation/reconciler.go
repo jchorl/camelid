@@ -19,7 +19,7 @@ type Client interface {
 	Reconcile(context.Context) error
 }
 
-const dynamoTable = "TradeRecordsTest"
+const dynamoTable = "CamelidRecordsTest"
 
 type client struct {
 	db             dynamodbiface.DynamoDBAPI
